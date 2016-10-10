@@ -1,0 +1,5 @@
+module CCKV {
+        header "ckv.h"
+        link "CCKV"
+        export *
+}
