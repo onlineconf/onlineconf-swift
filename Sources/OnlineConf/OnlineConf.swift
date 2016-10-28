@@ -2,14 +2,17 @@
 import CCKV
 import Foundation
 
-public typealias ErrorCb = (String, String, Int32) -> Void
+private func errorCallBack(path: String, call: String, num: Int) {
+	print("Error num \(num), path \(path) and call \(call)")
+}
 
-func err(path: String, call: String, num : Int32)
-{
-	print("Error num \(num), path \(path) and call \(call)" )
+private func cErrorCallBack(_ ecb: UnsafeMutableRawPointer?, _ path: UnsafePointer<CChar>?, _ call: UnsafePointer<CChar>?, _ num: Int32) -> Void {
+	ecb!.assumingMemoryBound(to: Config.ErrorCallBack.self).pointee(String(cString: path!), String(cString: call!), Int(num))
 }
 
 public class Config {
+
+	public typealias ErrorCallBack = (String, String, Int) -> Void
 
 	public struct Kind {
 
@@ -57,24 +60,29 @@ public class Config {
 
 		var rawValue: UInt32 {
 			let type: ckv_try_mmap
-				switch self {
-					case .mmap: type = CKV_MMAP_MALLOC_ON_FAIL
-					case .mmapMalloc: type = CKV_MMAP_OR_FAIL
-					case .malloc: type = CKV_MALLOC_ONLY
-				}
+			switch self {
+				case .mmap: type = CKV_MMAP_MALLOC_ON_FAIL
+				case .mmapMalloc: type = CKV_MMAP_OR_FAIL
+				case .malloc: type = CKV_MALLOC_ONLY
+			}
 			return type.rawValue
 		}
 	}
-
-	public init(path: String, kind: Kind = Kind(.cdb, typed: true), memory: Memory = .mmap, ecb: @escaping ErrorCb) throws {
+	
+	public init(path: String, kind: Kind = Kind(.cdb, typed: true), memory: Memory = .mmap, ecb: @escaping ErrorCallBack = errorCallBack) throws {
+		self.ecb = ecb
+		guard let kv = ckv_open(path, kind.type, ckv_try_mmap(memory.rawValue), cErrorCallBack, UnsafeMutablePointer(&self.ecb))
+		else  { throw ConfigError.failOpenConfig }
+		var st = stat()
+		if stat(path, &st) != 0 {
+			ecb(path, "Config.init", -1)
+			throw ConfigError.failOpenConfig
+		}
+		self.modify = st.st_mtim.tv_sec
+		self.kv = kv
 		self.path = path
 		self.kind = kind
 		self.memory = memory
-		self.ecb = ecb
-		self.kv = ckv_open(path, kind.type, ckv_try_mmap(memory.rawValue), {
-				a,b,c,d in a!.assumingMemoryBound(to: ErrorCb.self).pointee(String(cString: b!), String(cString: c!), d)
-				}, UnsafeMutablePointer(&self.ecb))
-		if kv == nil  { throw ConfigError.failOpenConfig }
 	}
 
 	deinit {
@@ -82,43 +90,50 @@ public class Config {
 	}
 
 	public func reload() throws -> Void {
-		guard let kv = ckv_open(path, kind.type, ckv_try_mmap(memory.rawValue), {
-				a,b,c,d in a!.assumingMemoryBound(to: ErrorCb.self).pointee(String(cString: b!), String(cString: c!), d)
-				}, UnsafeMutablePointer(&self.ecb))
+		guard let kv = ckv_open(path, kind.type, ckv_try_mmap(memory.rawValue), cErrorCallBack, UnsafeMutablePointer(&self.ecb))
 		else { throw ConfigError.failReloadConfig }
-		self.kv = kv
+		var st = stat()
+		if stat(path, &st) != 0 {
+			ecb(path, "Config.reload", -1)
+			ckv_close(kv)
+		}
+		else {
+			ckv_close(self.kv)
+			modify = st.st_mtim.tv_sec
+			self.kv = kv
+		}
 	}
 
 	public func get(_ key: String) -> String? {
-		let param = getString(key)
-			guard let vf = param else { return nil }
-		return vf.0
+		return getRawString(key)
 	}
 
 	public func get(_ key: String) -> [String]? {
-		let param = getString(key)
-		guard let vf = param else { return nil }
-		return vf.0.characters.split(separator: ",").map(String.init)
+		guard let rawValue = getRawString(key)
+		else { return nil }
+		return rawValue.characters.split(separator: ",").map(String.init)
 	}
 
 	public func get(_ key: String) -> Int? {
-		let param = getString(key)
-			guard let vf = param else { return nil }
-		return Int(vf.0)
+		guard let rawValue = getRawString(key)
+		else { return nil }
+		return Int(rawValue)
 	}
 
 	public func get(_ key: String) -> Bool {
-		let param = getString(key)
-		guard let vf = param else { return false }
-		if vf.0.isEmpty || vf.0 == "0" { return false }
+		guard let rawValue = getRawString(key)
+		else { return false }
+		if rawValue.isEmpty || rawValue == "0" { return false }
 		return true
 	}
 
-	public func getJson(_ key: String) -> Any? {
-		let vf = getData(key)
-		let parsed = try? JSONSerialization.jsonObject(with: vf!.0)
-		return parsed
+	public func getJSON(_ key: String) -> Any? {
+		guard let rawValue = getRawData(key)
+		else { return nil }
+		return try? JSONSerialization.jsonObject(with: rawValue)
 	}
+
+	public var modify: time_t
 
 	static public func reload() throws -> Void {
 		try configTree.reload()
@@ -140,39 +155,43 @@ public class Config {
 		return configTree.get(key)
 	}
 
-	static public func getJson(_ key: String) -> Any? {
-		return configTree.getJson(key)
+	static public func getJSON(_ key: String) -> Any? {
+		return configTree.getJSON(key)
 	}
 
-	private var kv: OpaquePointer?
+	static public var modify: time_t {
+		return configTree.modify
+	}
+
+	private var kv: OpaquePointer
 	private let path: String
 	private let kind: Kind
 	private let memory: Memory
-	private var ecb: ErrorCb
-	static private var configTree = try! Config(path: "/usr/local/etc/onlineconf/TREE.cdb", ecb: err)
+	private var ecb: ErrorCallBack
+	static private var configTree = try! Config(path: "/usr/local/etc/onlineconf/TREE.cdb", ecb: errorCallBack)
 
-	private func getString(_ key: String) -> (String, String)? {
+	private func getRawString(_ key: String) -> String? {
 		guard let vf = getFromCKV(key) else { return nil }
 		if vf.1 == "s" {
-			let v_len = Int(vf.0.len)
-			guard let c_v = vf.0.str else { return nil }
-			guard let value = c_v.withMemoryRebound(to: UTF8.CodeUnit.self, capacity: v_len, {
-				String._fromCodeUnitSequence(UTF8.self, input: UnsafeBufferPointer(start: $0, count: v_len))
-				})
+			let vLen = Int(vf.0.len)
+			guard let cValue = vf.0.str else { return nil }
+			guard let value = cValue.withMemoryRebound(to: UTF8.CodeUnit.self, capacity: vLen, {
+				String._fromCodeUnitSequence(UTF8.self, input: UnsafeBufferPointer(start: $0, count: vLen))
+			})
 			else { return nil }
-			return (value, vf.1)
+			return value
 		}
 		else { return nil } /* may be throw exception */
 	}
 
-	private func getData(_ key: String) -> (Data, String)? {
+	private func getRawData(_ key: String) -> Data? {
 		guard let vf = getFromCKV(key) else { return nil }
 		if vf.1 == "j" {
-			let v_len = Int(vf.0.len)
-			guard let c_v = vf.0.str else { return nil }
-			let pointer = UnsafeMutablePointer(mutating: c_v)
-			let value = Data(bytesNoCopy: pointer, count: v_len, deallocator: .none)
-			return (value, vf.1)
+			let vLen = Int(vf.0.len)
+			guard let cValue = vf.0.str else { return nil }
+			let pointer = UnsafeMutablePointer(mutating: cValue)
+			let value = Data(bytesNoCopy: pointer, count: vLen, deallocator: .none)
+			return value
 		}
 		else { return nil } /* may be throw exception */
 	}
@@ -187,13 +206,12 @@ public class Config {
 				}
 		}
 
-		let f_len = Int(f.len)
-		guard let c_f = f.str else { return nil }
-		guard let format = c_f.withMemoryRebound(to: UTF8.CodeUnit.self, capacity: f_len, {
-			String._fromCodeUnitSequence(UTF8.self, input: UnsafeBufferPointer(start: $0, count: f_len))
+		guard let cFormat = f.str else { return nil }
+		let fLen = Int(f.len)
+		guard let format = cFormat.withMemoryRebound(to: UTF8.CodeUnit.self, capacity: fLen, {
+			String._fromCodeUnitSequence(UTF8.self, input: UnsafeBufferPointer(start: $0, count: fLen))
 		})
 		else { return nil }
 		return (v, format)
 	}
 }
-
