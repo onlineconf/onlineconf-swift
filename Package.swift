@@ -5,5 +5,5 @@ let package = Package(
 	targets: [
 		Target(name: "CCKV"),
 		Target(name: "OnlineConf", dependencies: [.Target(name: "CCKV")]),
-    ]
+	]
 )

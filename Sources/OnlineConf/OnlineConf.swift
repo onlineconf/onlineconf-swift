@@ -73,12 +73,6 @@ public class Config {
 		self.ecb = ecb
 		guard let kv = ckv_open(path, kind.type, ckv_try_mmap(memory.rawValue), cErrorCallBack, UnsafeMutablePointer(&self.ecb))
 		else  { throw ConfigError.failOpenConfig }
-		var st = stat()
-		if stat(path, &st) != 0 {
-			ecb(path, "Config.init", -1)
-			throw ConfigError.failOpenConfig
-		}
-		self.modify = st.st_mtim.tv_sec
 		self.kv = kv
 		self.path = path
 		self.kind = kind
@@ -92,16 +86,8 @@ public class Config {
 	public func reload() throws -> Void {
 		guard let kv = ckv_open(path, kind.type, ckv_try_mmap(memory.rawValue), cErrorCallBack, UnsafeMutablePointer(&self.ecb))
 		else { throw ConfigError.failReloadConfig }
-		var st = stat()
-		if stat(path, &st) != 0 {
-			ecb(path, "Config.reload", -1)
-			ckv_close(kv)
-		}
-		else {
-			ckv_close(self.kv)
-			modify = st.st_mtim.tv_sec
-			self.kv = kv
-		}
+		ckv_close(self.kv)
+		self.kv = kv
 	}
 
 	public func get(_ key: String) -> String? {
@@ -130,10 +116,16 @@ public class Config {
 	public func getJSON(_ key: String) -> Any? {
 		guard let rawValue = getRawData(key)
 		else { return nil }
-		return try? JSONSerialization.jsonObject(with: rawValue)
+		if let json = try? JSONSerialization.jsonObject(with: rawValue) {
+			return json
+		}
+		self.ecb(key, "Can't convert string to JSON", -1)
+		return nil
 	}
 
-	public var modify: time_t
+	public var modify: time_t {
+		return ckv_fstat(kv)!.pointee.st_mtim.tv_sec
+	}
 
 	static public func reload() throws -> Void {
 		try configTree.reload()
@@ -174,26 +166,41 @@ public class Config {
 		guard let vf = getFromCKV(key) else { return nil }
 		if vf.1 == "s" {
 			let vLen = Int(vf.0.len)
-			guard let cValue = vf.0.str else { return nil }
+			guard let cValue = vf.0.str else {
+				self.ecb(key, "getRawString: Value is NULL", -1)
+				return nil
+			}
 			guard let value = cValue.withMemoryRebound(to: UTF8.CodeUnit.self, capacity: vLen, {
 				String._fromCodeUnitSequence(UTF8.self, input: UnsafeBufferPointer(start: $0, count: vLen))
 			})
-			else { return nil }
+			else {
+				self.ecb(key, "getRawString: Value can't convert to Swift string", -1)
+				return nil
+			}
 			return value
 		}
-		else { return nil } /* may be throw exception */
+		else {
+			self.ecb(key, "getRawString: Format is invalid", -1)
+			return nil
+		}
 	}
 
 	private func getRawData(_ key: String) -> Data? {
 		guard let vf = getFromCKV(key) else { return nil }
 		if vf.1 == "j" {
 			let vLen = Int(vf.0.len)
-			guard let cValue = vf.0.str else { return nil }
+			guard let cValue = vf.0.str else {
+				self.ecb(key, "getRawData: Value is NULL", -1)
+				return nil
+			}
 			let pointer = UnsafeMutablePointer(mutating: cValue)
 			let value = Data(bytesNoCopy: pointer, count: vLen, deallocator: .none)
 			return value
 		}
-		else { return nil } /* may be throw exception */
+		else {
+			self.ecb(key, "getRawData: Format is invalid", -1)
+			return nil
+		}
 	}
 
 	private func getFromCKV(_ key: String) -> (ckv_str, String)? {
@@ -211,7 +218,10 @@ public class Config {
 		guard let format = cFormat.withMemoryRebound(to: UTF8.CodeUnit.self, capacity: fLen, {
 			String._fromCodeUnitSequence(UTF8.self, input: UnsafeBufferPointer(start: $0, count: fLen))
 		})
-		else { return nil }
+		else {
+			self.ecb(key, "getFromCKV: Can't convert to Swift string", -1);
+			return nil
+		}
 		return (v, format)
 	}
 }

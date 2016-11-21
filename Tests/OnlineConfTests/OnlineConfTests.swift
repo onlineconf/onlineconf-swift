@@ -8,28 +8,69 @@ func errcv(path: String, call: String, num : Int) {
 }
 
 class OnlineConfTests: XCTestCase {
-	func testExample() {
-		let cfg = try? Config(path: "test.cdb", ecb: errcv)
-		if cfg == nil { print ("CFG is nil") }
-		let key = "/my/antispam/ratelimit/mras/complaint/limits"
-		let v: Any? = Config.getJSON("/my/api/apps/bonus-actions")
-		if v != nil { print ("Value \(v!)") }
-		else { print("Not found") }
+	func testLocalConf() {
+		let config = try! Config(path: "/home/s.priimenko/swift-OnlineConf/Tests/OnlineConfTests/test.cdb", ecb: errcv)
+		XCTAssertEqual(1, config.get("/blogs/closed")! as Int)
+		XCTAssertEqual("alei6.mail.ru:13013", config.get("/infrastructure/database/box/UserStatsBox/0ME")! as String)
+		XCTAssertEqual(["1","2","3","4","5","7","8","9"], config.get("/infrastructure/database/box/ju/data/available-for-registration")! as [String])
+		let json = config.getJSON("/agent/friendship/check/macagent") as! [String:Int]
+		XCTAssertEqual(json["check"]!, 1)
+		XCTAssertEqual(json["and"]!, 1)
+		XCTAssertFalse(config.get("/negative/key"))
+		XCTAssertEqual(config.modify, 1476451454)
+		let strs: [String] = config.get("/blogs/closed")!
+		XCTAssertEqual("1", strs[0])
+		XCTAssertEqual(1, strs.count)
+		XCTAssertTrue(config.get("/blogs/closed"))
 	}
 
-	func checkMemory() {
-		print("\(#file)")
-		let file = "String"
-		let cfg = try? Config(path: "test.cdb", ecb: errcv)
-		if cfg != nil {
-			var stream = open("test.cdb", 0, 0)
+	func testTreeConf() {
+		if let str: String = Config.get("/clicker/url/mm/url_expire") {
+			XCTAssertEqual(str, "http://my.titan.netbridge.ru/cgi-bin/my/emergencyurl")
 		}
+		else {
+			print("/clicker/url/mm/url_expire not found")
+		}
+		if let data = Config.getJSON("/infrastructure/database/box/odkl-profiles/mapping") {
+			let json = data as! [Int]
+			for index in 0...15 {
+				XCTAssertEqual(json[index], 1)
+			}
+			for index in 16...31 {
+				XCTAssertEqual(json[index], 2)
+			}
+			if let ip: [String] = Config.get("/infrastructure/database/silverlike") {
+				XCTAssertEqual(ip[0], "188.93.61.37:43500")
+				XCTAssertEqual(ip[1], "43500")
+				XCTAssertEqual(ip[2], "43500")
+				XCTAssertEqual(ip[3], "43500;188.93.61.37:43500")
+				XCTAssertEqual(ip[4], "43500")
+				XCTAssertEqual(ip[5], "43500")
+				XCTAssertEqual(ip[6], "43500;188.93.61.37:43500")
+			}
+		}
+		XCTAssertFalse(Config.get("/monitoring/pinger/check-warnings"))
+		XCTAssertFalse(Config.get("/monitoring/pinger/server/bury-fail-task"))
+		XCTAssertFalse(Config.get("/negative/key"))
+	}
+
+	func testMetaConf() {
+		var st = stat()
+		stat("/usr/local/etc/onlineconf/TREE.cdb", &st)
+		XCTAssertEqual(st.st_mtim.tv_sec, Config.modify)
+		stat("/home/s.priimenko/swift-OnlineConf/Tests/OnlineConfTests/test.cdb", &st)
+		let config = try! Config(path: "/home/s.priimenko/swift-OnlineConf/Tests/OnlineConfTests/test.cdb")
+		XCTAssertEqual(st.st_mtim.tv_sec, config.modify)
+		try! config.reload()
+		XCTAssertEqual(st.st_mtim.tv_sec, config.modify)
+		XCTAssertEqual(1, config.get("/blogs/closed")! as Int)
 	}
 
 	static var allTests : [(String, (OnlineConfTests) -> () throws -> Void)] {
 		return [
-			("testExample", testExample),
-			("checkmemory", checkMemory)
+			("testLocalConf", testLocalConf),
+			("testTreeConf", testTreeConf),
+			("testMetaConf", testMetaConf),
 		]
 	}
 }
