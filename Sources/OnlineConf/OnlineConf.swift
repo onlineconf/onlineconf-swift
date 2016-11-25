@@ -2,8 +2,14 @@
 import CCKV
 import Foundation
 
+struct StderrOutputStream: TextOutputStream {
+	public mutating func write(_ string: String) { fputs(string, stderr) }
+}
+
+var errStream = StderrOutputStream()
+
 private func errorCallBack(path: String, call: String, num: Int) {
-	print("Error num \(num), path \(path) and call \(call)")
+	print("Error num \(num), path \(path) and call \(call)", to: &errStream)
 }
 
 private func cErrorCallBack(_ ecb: UnsafeMutableRawPointer?, _ path: UnsafePointer<CChar>?, _ call: UnsafePointer<CChar>?, _ num: Int32) -> Void {

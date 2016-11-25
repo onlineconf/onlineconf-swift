@@ -4,7 +4,7 @@ import Foundation
 @testable import OnlineConf
 
 func errcv(path: String, call: String, num : Int) {
-	print("Error num \(num), path \(path) and call \(call)" )
+	print("Error code: \(num)", "Path: \(path)", "Call: \(call)", separator: "\n", to: &errStream)
 }
 
 class OnlineConfTests: XCTestCase {
