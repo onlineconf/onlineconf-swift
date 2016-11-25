@@ -17,7 +17,7 @@ class OnlineConfTests: XCTestCase {
 		XCTAssertEqual(json["check"]!, 1)
 		XCTAssertEqual(json["and"]!, 1)
 		XCTAssertFalse(config.get("/negative/key"))
-		XCTAssertEqual(config.modify, 1476451454)
+		XCTAssertEqual(config.mtime, 1476451454)
 		let strs: [String] = config.get("/blogs/closed")!
 		XCTAssertEqual("1", strs[0])
 		XCTAssertEqual(1, strs.count)
@@ -57,12 +57,12 @@ class OnlineConfTests: XCTestCase {
 	func testMetaConf() {
 		var st = stat()
 		stat("/usr/local/etc/onlineconf/TREE.cdb", &st)
-		XCTAssertEqual(st.st_mtim.tv_sec, Config.modify)
+		XCTAssertEqual(st.st_mtim.tv_sec, Config.mtime)
 		stat("/home/s.priimenko/swift-OnlineConf/Tests/OnlineConfTests/test.cdb", &st)
 		let config = try! Config(path: "/home/s.priimenko/swift-OnlineConf/Tests/OnlineConfTests/test.cdb")
-		XCTAssertEqual(st.st_mtim.tv_sec, config.modify)
+		XCTAssertEqual(st.st_mtim.tv_sec, config.mtime)
 		try! config.reload()
-		XCTAssertEqual(st.st_mtim.tv_sec, config.modify)
+		XCTAssertEqual(st.st_mtim.tv_sec, config.mtime)
 		XCTAssertEqual(1, config.get("/blogs/closed")! as Int)
 	}
 

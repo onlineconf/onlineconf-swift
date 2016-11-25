@@ -123,7 +123,7 @@ public class Config {
 		return nil
 	}
 
-	public var modify: time_t {
+	public var mtime: time_t {
 		return ckv_fstat(kv)!.pointee.st_mtim.tv_sec
 	}
 
@@ -151,8 +151,8 @@ public class Config {
 		return configTree.getJSON(key)
 	}
 
-	static public var modify: time_t {
-		return configTree.modify
+	static public var mtime: time_t {
+		return configTree.mtime
 	}
 
 	private var kv: OpaquePointer
