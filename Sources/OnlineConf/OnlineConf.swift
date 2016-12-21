@@ -1,6 +1,7 @@
 
 import CCKV
 import Foundation
+import Perl
 
 struct StderrOutputStream: TextOutputStream {
 	public mutating func write(_ string: String) { fputs(string, stderr) }
@@ -75,7 +76,19 @@ public class Config {
 		}
 	}
 	
-	public init(path: String, kind: Kind = Kind(.cdb, typed: true), memory: Memory = .mmap, ecb: @escaping ErrorCallBack = errorCallBack) throws {
+	public convenience init(module: String, kind: Kind = Kind(.cdb, typed: true), memory: Memory = .mmap, ecb: @escaping ErrorCallBack = errorCallBack) throws {
+		var ext: String
+		if kind.format == .cdb {
+			ext = ".cdb"
+		} else {
+			ext = ".conf"
+		}
+		let path = Config.pathConfig + module + ext
+		try self.init(path, kind: kind, memory: memory, ecb: ecb)
+		Config.configs[module] = self
+	}
+
+	init(_ path: String, kind: Kind = Kind(.cdb, typed: true), memory: Memory = .mmap, ecb: @escaping ErrorCallBack = errorCallBack) throws {
 		self.ecb = ecb
 		guard let kv = ckv_open(path, kind.type, ckv_try_mmap(memory.rawValue), cErrorCallBack, UnsafeMutablePointer(&self.ecb))
 		else  { throw ConfigError.failOpenConfig }
@@ -119,6 +132,17 @@ public class Config {
 		return true
 	}
 
+	public func get(_ key: String) -> PerlScalar? {
+		guard let (rawValue, type) = getRawPointer(key)
+		else { return nil }
+		if type != "c" {
+			return PerlScalar(rawValue, containing: .characters)
+		}
+		else {
+			return PerlScalar(rawValue)
+		}
+	}
+
 	public func getJSON(_ key: String) -> Any? {
 		guard let rawValue = getRawData(key)
 		else { return nil }
@@ -153,6 +177,10 @@ public class Config {
 		return configTree.get(key)
 	}
 
+	static public func get(_ key: String) -> PerlScalar? {
+		return configTree.get(key)
+	}
+
 	static public func getJSON(_ key: String) -> Any? {
 		return configTree.getJSON(key)
 	}
@@ -161,16 +189,18 @@ public class Config {
 		return configTree.mtime
 	}
 
+	static var configs: [String:Config] = [:]
+	static private var pathConfig = "/usr/local/etc/onlineconf/"
+	static private var configTree = try! Config(module: "TREE")
 	private var kv: OpaquePointer
 	private let path: String
 	private let kind: Kind
 	private let memory: Memory
 	private var ecb: ErrorCallBack
-	static private var configTree = try! Config(path: "/usr/local/etc/onlineconf/TREE.cdb", ecb: errorCallBack)
 
 	private func getRawString(_ key: String) -> String? {
 		guard let vf = getFromCKV(key) else { return nil }
-		if vf.1 == "s" {
+		if vf.1 != "c" {
 			let vLen = Int(vf.0.len)
 			guard let cValue = vf.0.str else {
 				self.ecb(key, "getRawString: Value is NULL", -1)
@@ -207,6 +237,16 @@ public class Config {
 			self.ecb(key, "getRawData: Format is invalid", -1)
 			return nil
 		}
+	}
+
+	private func getRawPointer(_ key: String) -> (UnsafeRawBufferPointer, String)? {
+		guard let vf = getFromCKV(key) else { return nil }
+		let vLen = Int(vf.0.len)
+		guard let cValue = vf.0.str else {
+			self.ecb(key, "getRawPointer: Value is NULL", -1)
+			return nil
+		}
+		return (UnsafeRawBufferPointer(start: cValue, count: vLen), vf.1)
 	}
 
 	private func getFromCKV(_ key: String) -> (ckv_str, String)? {

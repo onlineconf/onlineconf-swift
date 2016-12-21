@@ -1,6 +1,7 @@
 import XCTest
 import CCKV
 import Foundation
+import Perl
 @testable import OnlineConf
 
 func errcv(path: String, call: String, num : Int) {
@@ -9,7 +10,7 @@ func errcv(path: String, call: String, num : Int) {
 
 class OnlineConfTests: XCTestCase {
 	func testLocalConf() {
-		let config = try! Config(path: "/home/s.priimenko/swift-OnlineConf/Tests/OnlineConfTests/test.cdb", ecb: errcv)
+		let config = try! Config("Tests/OnlineConfTests/test.cdb", ecb: errcv)
 		XCTAssertEqual(1, config.get("/blogs/closed")! as Int)
 		XCTAssertEqual("alei6.mail.ru:13013", config.get("/infrastructure/database/box/UserStatsBox/0ME")! as String)
 		XCTAssertEqual(["1","2","3","4","5","7","8","9"], config.get("/infrastructure/database/box/ju/data/available-for-registration")! as [String])
@@ -58,12 +59,45 @@ class OnlineConfTests: XCTestCase {
 		var st = stat()
 		stat("/usr/local/etc/onlineconf/TREE.cdb", &st)
 		XCTAssertEqual(st.st_mtim.tv_sec, Config.mtime)
-		stat("/home/s.priimenko/swift-OnlineConf/Tests/OnlineConfTests/test.cdb", &st)
-		let config = try! Config(path: "/home/s.priimenko/swift-OnlineConf/Tests/OnlineConfTests/test.cdb")
+		stat("Tests/OnlineConfTests/test.cdb", &st)
+		let config = try! Config("Tests/OnlineConfTests/test.cdb")
 		XCTAssertEqual(st.st_mtim.tv_sec, config.mtime)
 		try! config.reload()
 		XCTAssertEqual(st.st_mtim.tv_sec, config.mtime)
 		XCTAssertEqual(1, config.get("/blogs/closed")! as Int)
+	}
+
+	func testPerlConf() {
+		let perl = PerlInterpreter()
+		perl.withUnsafeInterpreterPointer {
+			UnsafeInterpreter.current = $0
+			boot($0)
+		}
+		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/blogs/closed')"), 1)
+		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('MYMAIL', 'Add_db_login')"), "zzzQ")
+		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('kotiki', 'kotiki_db_login')"), "alei")
+		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/undef_key_from_tree', 404)"), 404)
+		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('MYMAIL', 'undef_key', 404)"), 404)
+		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/undef_without_def')") ?? 404, 404)
+		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('kotiki', 'undef_without_def')") ?? 404, 404)
+		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/agent/friendship/check/macagent')"), "{\"check\":1,\"and\":1}")
+		XCTAssertEqual(try perl.eval("MR::OnlineConf->get()") ?? 404, 404)
+	}
+
+	func testPerlReload() {
+		let perl = PerlInterpreter()
+		perl.withUnsafeInterpreterPointer {
+			UnsafeInterpreter.current = $0
+			boot($0)
+		}
+		var st = stat()
+		try! perl.eval("MR::OnlineConf->reload('MYMAIL')")
+		guard let config = try? Config(module: "MYMAIL")
+		else { return }
+		stat("/usr/local/etc/onlineconf/MYMAIL.cdb", &st)
+		XCTAssertEqual(st.st_mtim.tv_sec, config.mtime)
+		stat("/usr/local/etc/onlineconf/TREE.cdb", &st)
+		XCTAssertEqual(st.st_mtim.tv_sec, Config.mtime)
 	}
 
 	static var allTests : [(String, (OnlineConfTests) -> () throws -> Void)] {
@@ -71,6 +105,8 @@ class OnlineConfTests: XCTestCase {
 			("testLocalConf", testLocalConf),
 			("testTreeConf", testTreeConf),
 			("testMetaConf", testMetaConf),
+			("testPerlConf", testPerlConf),
+			("testPerlReload", testPerlReload),
 		]
 	}
 }
