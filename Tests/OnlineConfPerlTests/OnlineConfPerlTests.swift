@@ -20,7 +20,6 @@ class OnlineConfPerlTests: XCTestCase {
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('kotiki', 'undef_without_def')") ?? 404, 404)
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/agent/friendship/check/macagent')->{check}"), 1)
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/agent/friendship/check/macagent')->{and}"), 1)
-		XCTAssertEqual(try perl.eval("MR::OnlineConf->get()") ?? 404, 404)
 	}
 
 	func testPerlReload() {

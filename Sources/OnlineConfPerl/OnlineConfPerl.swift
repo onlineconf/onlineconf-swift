@@ -6,26 +6,23 @@ import Perl
 func boot(_ p: UnsafeInterpreterPointer) {
 	try! p.pointee.eval("use CBOR::XS; use JSON::XS;")
 	PerlSub(name: "MR::OnlineConf::get") {
-	(_: String?, arg1: String?, arg2: String?, arg3: String?) -> PerlScalar in
+	(_: String, arg1: String, arg2: PerlScalar, arg3: PerlScalar) -> PerlScalar in
 		var module: String
 		var key: String
-		var defaultValue: String?
-		if arg1 == nil {
-			return PerlScalar()
-		}
-		if arg1!.characters.first == "/" {
+		var defaultValue: PerlScalar
+		if arg1.characters.first == "/" {
 			defaultValue = arg2
-			key = arg1!
+			key = arg1
 			module = "TREE"
 		} else {
-			module = arg1!
-			if arg2 != nil { key = arg2! }
-			else { return PerlScalar(arg3) }
+			module = arg1
+			if arg2.defined { key = try String(arg2) }
+			else { return arg3 }
 			defaultValue = arg3
 		}
-		let config = try Config.getModule(module: module)
+		let config = try Config.getModule(module)
 		return try config!.withUnsafeRawBufferPointer(key: key) {
-			var val = PerlScalar(defaultValue)
+			var val = defaultValue
 			if $0 != nil {
 				let rawValue = $0!.0
 				let type = $0!.1
@@ -33,7 +30,7 @@ func boot(_ p: UnsafeInterpreterPointer) {
 				if type == "j" {
 					val = try p.pointee.call(sub: "JSON::XS::decode_json", args: [.some(val)])
 				}
-				if type == "c" {
+				else if type == "c" {
 					val = try p.pointee.call(sub: "CBOR::XS::decode_cbor", args: [.some(val)])
 				}
 			}
@@ -43,7 +40,7 @@ func boot(_ p: UnsafeInterpreterPointer) {
 
 	PerlSub(name: "MR::OnlineConf::reload") {
 	(name: String, module: String) in
-		try Config.getModule(module: module, isCreate: false)?.reload()
+		try Config.getModule(module, isCreate: false)?.reload()
 	}
 }
 

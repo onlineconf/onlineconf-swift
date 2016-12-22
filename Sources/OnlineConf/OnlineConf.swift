@@ -96,10 +96,10 @@ public class Config {
 		self.memory = memory
 	}
 
-	public static func getModule(module: String, kind: Kind = Kind(.cdb, typed: true), memory: Memory = .mmap, isCreate: Bool = true , ecb: @escaping ErrorCallBack = errorCallBack) throws -> Config? {
+	public static func getModule(_ module: String, isCreate: Bool = true) throws -> Config? {
 		var config = Config.configs[module]
 		if config == nil && isCreate {
-			config = try Config(module: module, kind: kind, memory: memory, ecb: ecb)
+			config = try Config(module: module)
 			Config.configs[module] = config!
 		}
 		return config
@@ -188,7 +188,7 @@ public class Config {
 
 	static var configs: [String:Config] = [:]
 	static private var pathConfig = "/usr/local/etc/onlineconf/"
-	static private var configTree = try! getModule(module: "TREE")!
+	static private var configTree = try! getModule("TREE")!
 	private var kv: OpaquePointer
 	private let path: String
 	private let kind: Kind
