@@ -5,6 +5,7 @@ let package = Package(
 	targets: [
 		Target(name: "CCKV"),
 		Target(name: "OnlineConf", dependencies: [.Target(name: "CCKV")]),
+		Target(name: "OnlineConfPerl", dependencies: [.Target(name: "OnlineConf")]),
 	],
 		dependencies: [
 		.Package(url: "https://github.com/my-mail-ru/swiftperl.git",
@@ -12,4 +13,4 @@ let package = Package(
 		]
 )
 
-products.append(Product(name: "OnlineConf", type: .Library(.Dynamic), modules: "OnlineConf"))
+products.append(Product(name: "OnlineConfPerl", type: .Library(.Dynamic), modules: "OnlineConfPerl"))

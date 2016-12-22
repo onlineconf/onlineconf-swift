@@ -1,7 +1,6 @@
 
 import CCKV
 import Foundation
-import Perl
 
 struct StderrOutputStream: TextOutputStream {
 	public mutating func write(_ string: String) { fputs(string, stderr) }
@@ -85,7 +84,6 @@ public class Config {
 		}
 		let path = Config.pathConfig + module + ext
 		try self.init(path, kind: kind, memory: memory, ecb: ecb)
-		Config.configs[module] = self
 	}
 
 	init(_ path: String, kind: Kind = Kind(.cdb, typed: true), memory: Memory = .mmap, ecb: @escaping ErrorCallBack = errorCallBack) throws {
@@ -96,6 +94,15 @@ public class Config {
 		self.path = path
 		self.kind = kind
 		self.memory = memory
+	}
+
+	public static func getModule(module: String, kind: Kind = Kind(.cdb, typed: true), memory: Memory = .mmap, isCreate: Bool = true , ecb: @escaping ErrorCallBack = errorCallBack) throws -> Config? {
+		var config = Config.configs[module]
+		if config == nil && isCreate {
+			config = try Config(module: module, kind: kind, memory: memory, ecb: ecb)
+			Config.configs[module] = config!
+		}
+		return config
 	}
 
 	deinit {
@@ -132,15 +139,9 @@ public class Config {
 		return true
 	}
 
-	public func get(_ key: String) -> PerlScalar? {
-		guard let (rawValue, type) = getRawPointer(key)
-		else { return nil }
-		if type != "c" {
-			return PerlScalar(rawValue, containing: .characters)
-		}
-		else {
-			return PerlScalar(rawValue)
-		}
+	public func withUnsafeRawBufferPointer<R>(key: String, _ body: ((UnsafeRawBufferPointer, String)?) throws -> R) rethrows -> R {
+		let rawData = getRawPointer(key)
+		return try body(rawData)
 	}
 
 	public func getJSON(_ key: String) -> Any? {
@@ -177,10 +178,6 @@ public class Config {
 		return configTree.get(key)
 	}
 
-	static public func get(_ key: String) -> PerlScalar? {
-		return configTree.get(key)
-	}
-
 	static public func getJSON(_ key: String) -> Any? {
 		return configTree.getJSON(key)
 	}
@@ -191,7 +188,7 @@ public class Config {
 
 	static var configs: [String:Config] = [:]
 	static private var pathConfig = "/usr/local/etc/onlineconf/"
-	static private var configTree = try! Config(module: "TREE")
+	static private var configTree = try! getModule(module: "TREE")!
 	private var kv: OpaquePointer
 	private let path: String
 	private let kind: Kind
