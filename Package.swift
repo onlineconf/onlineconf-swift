@@ -13,4 +13,4 @@ let package = Package(
 		]
 )
 
-products.append(Product(name: "OnlineConfPerl", type: .Library(.Dynamic), modules: "OnlineConfPerl"))
+products.append(Product(name: "OnlineConf", type: .Library(.Dynamic), modules: "OnlineConfPerl"))

@@ -2,7 +2,7 @@
 import OnlineConf
 import Perl
 
-@_cdecl("boot_OnlineConfPerl")
+@_cdecl("boot_OnlineConf")
 func boot(_ p: UnsafeInterpreterPointer) {
 	try! p.pointee.eval("use CBOR::XS; use JSON::XS;")
 	PerlSub(name: "MR::OnlineConf::get") {
