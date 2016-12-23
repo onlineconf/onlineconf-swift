@@ -3,8 +3,9 @@ import OnlineConf
 import Perl
 
 @_cdecl("boot_OnlineConf")
-func boot(_ p: UnsafeInterpreterPointer) {
+public func boot(_ p: UnsafeInterpreterPointer) {
 	try! p.pointee.eval("use CBOR::XS; use JSON::XS;")
+	var cashValue = [String: [String:PerlScalar]]()
 	PerlSub(name: "MR::OnlineConf::get") {
 	(_: String, arg1: String, arg2: PerlScalar, arg3: PerlScalar) -> PerlScalar in
 		var module: String
@@ -20,6 +21,9 @@ func boot(_ p: UnsafeInterpreterPointer) {
 			else { return arg3 }
 			defaultValue = arg3
 		}
+		if let cashValue = cashValue[module]?[key] {
+			return (cashValue.defined ? cashValue : defaultValue)
+		}
 		let config = try Config.getModule(module)
 		return try config!.withUnsafeRawBufferPointer(key: key) {
 			var val = defaultValue
@@ -33,6 +37,13 @@ func boot(_ p: UnsafeInterpreterPointer) {
 				else if type == "c" {
 					val = try p.pointee.call(sub: "CBOR::XS::decode_cbor", args: [.some(val)])
 				}
+				if var hash = cashValue[module]{
+					hash[key] = val
+					cashValue[module] = hash
+				}
+				else {
+					cashValue[module] = [key:val]
+				}
 			}
 			return val
 		}
@@ -41,6 +52,7 @@ func boot(_ p: UnsafeInterpreterPointer) {
 	PerlSub(name: "MR::OnlineConf::reload") {
 	(name: String, module: String) in
 		try Config.getModule(module, isCreate: false)?.reload()
+		cashValue[module] = nil
 	}
 }
 

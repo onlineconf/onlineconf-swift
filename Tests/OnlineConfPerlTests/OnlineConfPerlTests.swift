@@ -17,6 +17,7 @@ class OnlineConfPerlTests: XCTestCase {
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/undef_key_from_tree', 404)"), 404)
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('MYMAIL', 'undef_key', 404)"), 404)
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/undef_without_def')") ?? 404, 404)
+		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/undef_without_def')") ?? 1000, 1000)
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('kotiki', 'undef_without_def')") ?? 404, 404)
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/agent/friendship/check/macagent')->{check}"), 1)
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/agent/friendship/check/macagent')->{and}"), 1)
