@@ -21,6 +21,7 @@ class OnlineConfTests: XCTestCase {
 		XCTAssertEqual("1", strs[0])
 		XCTAssertEqual(1, strs.count)
 		XCTAssertTrue(config.get("/blogs/closed"))
+		XCTAssertEqual(config.get("/blogs/closed")! as Double, 1.0)
 	}
 
 	func testTreeConf() {
@@ -48,6 +49,7 @@ class OnlineConfTests: XCTestCase {
 				XCTAssertEqual(ip[6], "43500;188.93.61.37:43500")
 			}
 		}
+	    XCTAssertEqual(Config.get("/onlineconf/module/newraker_new/per_type_settings/TYPE_PHOTO/collage/enabled")! as Double, 100.0)
 		XCTAssertFalse(Config.get("/monitoring/pinger/check-warnings"))
 		XCTAssertFalse(Config.get("/monitoring/pinger/server/bury-fail-task"))
 		XCTAssertFalse(Config.get("/negative/key"))

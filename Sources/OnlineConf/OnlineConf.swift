@@ -132,6 +132,12 @@ public class Config {
 		return Int(rawValue)
 	}
 
+	public func get(_ key: String) -> Double? {
+		guard let rawValue = getRawString(key)
+		else { return nil }
+		return Double(rawValue)
+	}
+
 	public func get(_ key: String) -> Bool {
 		guard let rawValue = getRawString(key)
 		else { return false }
@@ -171,6 +177,10 @@ public class Config {
 	}
 
 	static public func get(_ key: String) -> Int? {
+		return configTree.get(key)
+	}
+
+	static public func get(_ key: String) -> Double? {
 		return configTree.get(key)
 	}
 
