@@ -1,4 +1,4 @@
-package OnlineConf;
+package MR::OnlineConf;
 
 use strict;
 use warnings;
@@ -6,6 +6,6 @@ use warnings;
 our $VERSION = '0.01';
 
 require XSLoader;
-XSLoader::load('OnlineConf', $VERSION);
+XSLoader::load('MR::OnlineConf', $VERSION);
 
 1;

@@ -7,10 +7,9 @@ let package = Package(
 		Target(name: "OnlineConf", dependencies: [.Target(name: "CCKV")]),
 		Target(name: "OnlineConfPerl", dependencies: [.Target(name: "OnlineConf")]),
 	],
-		dependencies: [
-		.Package(url: "https://github.com/my-mail-ru/swiftperl.git",
-			majorVersion: 0),
-		]
+	dependencies: [
+		.Package(url: "https://github.com/my-mail-ru/swiftperl.git", majorVersion: 0),
+	]
 )
 
-products.append(Product(name: "OnlineConf", type: .Library(.Dynamic), modules: "OnlineConfPerl"))
+products.append(Product(name: "XS/OnlineConf", type: .Library(.Dynamic), modules: "OnlineConfPerl"))

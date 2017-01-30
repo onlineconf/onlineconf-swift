@@ -8,7 +8,9 @@ func errcv(path: String, call: String, num : Int) {
 
 class OnlineConfTests: XCTestCase {
 	func testLocalConf() {
-		let config = try! Config("Tests/OnlineConfTests/test.cdb", ecb: errcv)
+		var cdbstat = stat()
+		stat("Tests/OnlineConfTests/test.cdb", &cdbstat)
+		let config = try! Config(path: "Tests/OnlineConfTests/test.cdb", onError: errcv)
 		XCTAssertEqual(1, config.get("/blogs/closed")! as Int)
 		XCTAssertEqual("alei6.mail.ru:13013", config.get("/infrastructure/database/box/UserStatsBox/0ME")! as String)
 		XCTAssertEqual(["1","2","3","4","5","7","8","9"], config.get("/infrastructure/database/box/ju/data/available-for-registration")! as [String])
@@ -16,7 +18,7 @@ class OnlineConfTests: XCTestCase {
 		XCTAssertEqual(json["check"]!, 1)
 		XCTAssertEqual(json["and"]!, 1)
 		XCTAssertFalse(config.get("/negative/key"))
-		XCTAssertEqual(config.mtime, 1476451454)
+		XCTAssertEqual(config.mtime, cdbstat.st_mtim.tv_sec)
 		let strs: [String] = config.get("/blogs/closed")!
 		XCTAssertEqual("1", strs[0])
 		XCTAssertEqual(1, strs.count)
@@ -60,9 +62,14 @@ class OnlineConfTests: XCTestCase {
 		stat("/usr/local/etc/onlineconf/TREE.cdb", &st)
 		XCTAssertEqual(st.st_mtim.tv_sec, Config.mtime)
 		stat("Tests/OnlineConfTests/test.cdb", &st)
-		let config = try! Config("Tests/OnlineConfTests/test.cdb")
+		let config = try! Config(path: "Tests/OnlineConfTests/test.cdb")
 		XCTAssertEqual(st.st_mtim.tv_sec, config.mtime)
-		try! config.reload()
+		sleep(1)
+		let recheck = config.recheckTime
+		XCTAssertFalse(config.reload())
+		XCTAssertEqual(config.recheckTime, recheck)
+		try! config.forceReload()
+		XCTAssertNotEqual(config.recheckTime, recheck)
 		XCTAssertEqual(st.st_mtim.tv_sec, config.mtime)
 		XCTAssertEqual(1, config.get("/blogs/closed")! as Int)
 	}

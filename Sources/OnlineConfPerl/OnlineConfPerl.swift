@@ -2,57 +2,76 @@
 import OnlineConf
 import Perl
 
-@_cdecl("boot_OnlineConf")
+@_cdecl("boot_MR__OnlineConf")
 public func boot(_ p: UnsafeInterpreterPointer) {
-	try! p.pointee.eval("use CBOR::XS; use JSON::XS;")
-	var cashValue = [String: [String:PerlScalar]]()
-	PerlSub(name: "MR::OnlineConf::get") {
-	(_: String, arg1: String, arg2: PerlScalar, arg3: PerlScalar) -> PerlScalar in
-		var module: String
-		var key: String
-		var defaultValue: PerlScalar
-		if arg1.characters.first == "/" {
-			defaultValue = arg2
-			key = arg1
-			module = "TREE"
-		} else {
-			module = arg1
-			if arg2.defined { key = try String(arg2) }
-			else { return arg3 }
-			defaultValue = arg3
-		}
-		if let cashValue = cashValue[module]?[key] {
-			return (cashValue.defined ? cashValue : defaultValue)
-		}
-		let config = try Config.getModule(module)
-		return try config!.withUnsafeRawBufferPointer(key: key) {
-			var val = defaultValue
-			if $0 != nil {
-				let rawValue = $0!.0
-				let type = $0!.1
-				val = PerlScalar(rawValue, containing: type == "c" ? .bytes : .characters)
-				if type == "j" {
-					val = try p.pointee.call(sub: "JSON::XS::decode_json", args: [.some(val)])
-				}
-				else if type == "c" {
-					val = try p.pointee.call(sub: "CBOR::XS::decode_cbor", args: [.some(val)])
-				}
-				if var hash = cashValue[module]{
-					hash[key] = val
-					cashValue[module] = hash
-				}
-				else {
-					cashValue[module] = [key:val]
-				}
-			}
-			return val
-		}
-	}
-
-	PerlSub(name: "MR::OnlineConf::reload") {
-	(name: String, module: String) in
-		try Config.getModule(module, isCreate: false)?.reload()
-		cashValue[module] = nil
-	}
+	try! p.pointee.require("JSON::XS")
+	try! p.pointee.require("CBOR::XS")
+	OnlineConfPerl.initialize(perl: p)
 }
 
+final class OnlineConfPerl : PerlBridgedObject, PerlNamedClass {
+	static let perlClassName = "MR::OnlineConf"
+
+	static var instance = OnlineConfPerl()
+	static var cache = [String: [String: PerlScalar?]]()
+
+	static func initialize(perl: UnsafeInterpreterPointer = UnsafeInterpreter.current) {
+		createPerlMethod("instance") {
+			(_: String) -> OnlineConfPerl in
+			return instance
+		}
+
+		createPerlMethod("reload") {
+			(_: PerlScalar, module: String, opts: [String: Bool]) in
+			guard let config = Config.getModule(ifLoaded: module) else { return }
+			if opts["force"] ?? false {
+				try config.forceReload()
+				cache[module] = nil
+			} else if config.reload() {
+				cache[module] = nil
+			}
+		}
+
+		createPerlMethod("get") {
+			(_: PerlScalar, args: [PerlScalar]) throws -> PerlScalar in
+			var args = ArraySlice(args)
+			guard let moduleOrKey = try args.popFirst().map({ try String($0) }) else {
+				throw Error.invalidArguments
+			}
+			let module: String
+			let key: String
+			if moduleOrKey.characters.first == "/" {
+				module = "TREE"
+				key = moduleOrKey
+			} else {
+				guard let k = try args.popFirst().map({ try String($0) }) else {
+					throw Error.invalidArguments
+				}
+				module = moduleOrKey
+				key = k
+			}
+			let defaultValue = args.popFirst()
+			if let value = cache[module]?[key] {
+				return value ?? defaultValue ?? PerlScalar()
+			}
+			let value: PerlScalar? = try Config.getModule(module).withUnsafeValue(key: key) { value in
+				switch value.format {
+					case .text: return PerlScalar(value.data, containing: .characters)
+					case .json: return try PerlSub.call("JSON::XS::decode_json", PerlScalar(value.data, containing: .bytes))
+					case .cbor: return try PerlSub.call("CBOR::XS::decode_cbor", PerlScalar(value.data, containing: .bytes))
+				}
+			}
+			if cache[module] != nil {
+				cache[module]![key] = value
+			} else {
+				cache[module] = [key: value]
+			}
+			return value ?? defaultValue ?? PerlScalar()
+		}
+
+	}
+
+	enum Error : Swift.Error {
+		case invalidArguments
+	}
+}
