@@ -10,8 +10,8 @@ Source0:       %{name}-%{version}.tar.gz
 BuildRoot:     %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 BuildRequires: swift >= 3.0
-BuildRequires: swift-packaging >= 0.4
-BuildRequires: swiftperl >= 0.3
+BuildRequires: swift-packaging >= 0.6
+BuildRequires: swiftpm(https://github.com/my-mail-ru/swiftperl.git) >= 0.3.0
 
 %swift_package_ssh_url
 %swift_find_provides_and_requires
@@ -50,14 +50,28 @@ rm -rf %{buildroot}
 %files
 %defattr(-,root,root,-)
 %{swift_libdir}/*.so
+
+
+%package devel
+Summary:  Module and header file for OnlineConf client
+Requires: swift-OnlineConf = %{version}-%{release}
+
+%description devel
+Module and header file for Swift OnlineConf client.
+
+%{?__revision:Built from revision %{__revision}.}
+
+
+%files devel
+%defattr(-,root,root,-)
 %{swift_moduledir}/*.swiftmodule
 %{swift_moduledir}/*.swiftdoc
 %{swift_clangmoduleroot}/CCKV
 
-%package -n perl-MR-OnlineConf
-Summary:  OnlineConf client
-Epoch: 1
 
+%package -n perl-MR-OnlineConf
+Summary:   OnlineConf client
+Epoch:     1
 Requires:  swift-OnlineConf = %{version}-%{release}
 Provides:  perl-MR-Onlineconf = 1:%{version}-%{release}
 Obsoletes: perl-MR-Onlineconf
@@ -66,6 +80,7 @@ Obsoletes: perl-MR-Onlineconf
 OnlineConf client for Perl.
 
 %{?__revision:Built from revision %{__revision}.}
+
 
 %files -n perl-MR-OnlineConf
 %defattr(-,root,root,-)
