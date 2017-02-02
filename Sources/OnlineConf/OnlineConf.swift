@@ -101,10 +101,42 @@ public final class Config {
 	public struct UnsafeValue {
 		public let format: ValueFormat
 		public let data: UnsafeRawBufferPointer
+
+		func decodeString() throws -> String {
+			guard let str = String._fromCodeUnitSequence(UTF8.self, input: data) else {
+				throw DecodeError.invalidUTF8
+			}
+			return str
+		}
+
+		func decodeJSON() throws -> Any {
+			let start = UnsafeMutablePointer(mutating: data.baseAddress!.assumingMemoryBound(to: UTF8.CodeUnit.self))
+			let jsonData = Data(bytesNoCopy: start, count: data.count, deallocator: .none)
+			guard let json = try? JSONSerialization.jsonObject(with: jsonData) else {
+				throw DecodeError.invalidJSON
+			}
+			return json
+		}
+
+		func decode() throws -> Any {
+			switch format {
+				case .text: return try decodeString()
+				case .json: return try decodeJSON()
+				case .cbor: throw DecodeError.cborUnsupported
+			}
+		}
+
+		enum DecodeError : String, Swift.Error, CustomStringConvertible {
+			case invalidUTF8 = "Invalid UTF-8"
+			case invalidJSON = "Invalid JSON"
+			case cborUnsupported = "CBOR is unsupported yet"
+			var description: String { return rawValue }
+		}
 	}
 
 	public enum Error : Swift.Error {
 		case openFailure
+		case lockedByIterator
 	}
 
 	public typealias ErrorCallback = (String, String, Int) -> Void
@@ -113,11 +145,13 @@ public final class Config {
 		print("OnlineConf error: \(path) - \(call) [\(num)]", to: &errStream)
 	}
 
-	private var kv: OpaquePointer
-	private let path: String
-	private let kind: Kind
-	private let memory: Memory
-	private var onError: ErrorCallback
+	var kv: OpaquePointer
+	let path: String
+	let kind: Kind
+	let memory: Memory
+	var onError: ErrorCallback
+
+	var iteratorCount = 0
 
 	static var dir = "/usr/local/etc/onlineconf/"
 	
@@ -146,6 +180,9 @@ public final class Config {
 	var recheckTime: Int? = checkInterval.map { time(nil) + $0 }
 
 	public func forceReload() throws {
+		guard iteratorCount == 0 else {
+			throw Error.lockedByIterator
+		}
 		guard let kv = ckv_open(path, kind.rawValue, memory.rawValue, errcb, UnsafeMutablePointer(&self.onError)) else {
 			throw Error.openFailure
 		}
@@ -180,11 +217,12 @@ public final class Config {
 					onError(key, "Invalid format \(value.format) for String", -1)
 					return nil
 				default:
-					guard let str = String._fromCodeUnitSequence(UTF8.self, input: value.data) else {
-						onError(key, "Invalid UTF-8", -1)
+					do {
+						return try value.decodeString()
+					} catch {
+						onError(key, String(describing: error), -1)
 						return nil
 					}
-					return str
 			}
 		}
 	}
@@ -217,7 +255,7 @@ public final class Config {
 		return !(str.isEmpty || str == "0")
 	}
 
-	public func withUnsafeValue<R>(key: String, _ body: (UnsafeValue) throws -> R?) rethrows -> R? {
+	public func withUnsafeValue<R>(key: String, body: (UnsafeValue) throws -> R?) rethrows -> R? {
 		periodicReload()
 
 		var fmt = ckv_str()
@@ -238,13 +276,12 @@ public final class Config {
 		return withUnsafeValue(key: key) { value in
 			switch value.format {
 				case .json:
-					let start = UnsafeMutablePointer(mutating: value.data.baseAddress!.assumingMemoryBound(to: UTF8.CodeUnit.self))
-					let data = Data(bytesNoCopy: start, count: value.data.count, deallocator: .none)
-					guard let json = try? JSONSerialization.jsonObject(with: data) else {
-						onError(key, "Invalid JSON", -1)
+					do {
+						return try value.decodeJSON()
+					} catch {
+						onError(key, String(describing: error), -1)
 						return nil
 					}
-					return json
 				case .cbor:
 					onError(key, "CBOR is unsupported yet", -1)
 					return nil
@@ -260,14 +297,6 @@ public final class Config {
 	}
 
 	static private var configTree = try! getModule("TREE")
-
-	static public func reload() -> Bool {
-		return configTree.reload()
-	}
-
-	static public func forceReload() throws {
-		try configTree.forceReload()
-	}
 
 	static public func get(_ key: String) -> String? {
 		return configTree.get(key)
@@ -310,6 +339,71 @@ public final class Config {
 
 	public static func getModule(ifLoaded module: String) -> Config? {
 		return Config.configs[module]
+	}
+
+	public static func reload() -> Bool {
+		var reloaded = false
+		for (_, c) in configs {
+			if c.reload() {
+				reloaded = true
+			}
+		}
+		return reloaded
+	}
+
+	public static func forceReload() throws {
+		var firstError: Swift.Error?
+		for (_, c) in configs {
+			do {
+				try c.forceReload()
+			} catch {
+				if firstError == nil {
+					firstError = error
+				}
+			}
+		}
+		if let error = firstError {
+			throw error
+		}
+	}
+}
+
+extension Config : Sequence {
+	public func makeIterator() -> Iterator {
+		return Iterator(self)
+	}
+
+	public final class Iterator : IteratorProtocol {
+		let config: Config
+		var iter = ckv_iter()
+
+		public init(_ config: Config) {
+			self.config = config
+			config.iteratorCount += 1
+			ckv_iter_init(config.kv, &iter)
+		}
+
+		deinit {
+			config.iteratorCount -= 1
+		}
+
+		public func withNextUnsafeValue<V>(_ body: (Config.UnsafeValue) throws -> V) -> (String, V)? {
+			while true {
+				guard ckv_iter_next(config.kv, &iter) != 0 else { return nil }
+				let key = String._fromCodeUnitSequenceWithRepair(UTF8.self, input: UnsafeRawBufferPointer(start: iter.key.str, count: Int(iter.key.len))).0
+				let format = Config.ValueFormat(rawValue: UnsafeRawBufferPointer(start: iter.fmt.str, count: Int(iter.fmt.len)), fileFormat: config.kind.format)
+				let value = Config.UnsafeValue(format: format, data: UnsafeRawBufferPointer(start: iter.val.str, count: Int(iter.val.len)))
+				do {
+					return (key, try body(value))
+				} catch {
+					config.onError(key, String(describing: error), -1)
+				}
+			}
+		}
+
+		public func next() -> (String, Any)? {
+			return withNextUnsafeValue({ try $0.decode() })
+		}
 	}
 }
 

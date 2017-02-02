@@ -80,4 +80,30 @@ int ckv_size(struct ckv* ckv);
  * returns 1 if key exists, 0 otherwise */
 int ckv_key_get(struct ckv *ckv, char const* key, int key_len, struct ckv_str* val, struct ckv_str* format);
 
+struct ckv_iter {
+	struct ckv_str key, val, fmt;
+
+	/* private fields below, don't touch them */
+	char _priv[2*(sizeof(void*)>sizeof(long)?sizeof(void*):sizeof(long))];
+};
+/* inits iterator */
+void ckv_iter_init(struct ckv *ckv, struct ckv_iter *iter);
+/* moves iterator forward
+ * if end of dictionary reached, it returns 0, and `key`, `val` and `iter`
+ * reset to zero.
+ * otherwise returns non-zero and sets key, val and fmt appropriately.
+ * Attention: it is not safe to close ckv in a middle of iteration,
+ *            ckv_iter_next most likely will cause segmentation fault then.
+ *
+ *     struct ckv_iter iter;
+ *     ckv_iter_init(ckv, &iter);
+ *     while (ckv_iter_next(ckv, &iter)) {
+ *         printf("key: %*s val: %*s\n",
+ *             iter.key.len, iter.key.str,
+ *             iter.val.len, iter.val.str);
+ *     }
+ *
+ * */
+int ckv_iter_next(struct ckv *ckv, struct ckv_iter *iter);
+
 #endif

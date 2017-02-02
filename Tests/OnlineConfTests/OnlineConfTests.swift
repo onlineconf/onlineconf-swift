@@ -55,6 +55,11 @@ class OnlineConfTests: XCTestCase {
 		XCTAssertFalse(Config.get("/monitoring/pinger/check-warnings"))
 		XCTAssertFalse(Config.get("/monitoring/pinger/server/bury-fail-task"))
 		XCTAssertFalse(Config.get("/negative/key"))
+		var dict = [String: Any]()
+		for (k, v) in try! Config.getModule("MYMAIL") {
+			dict[k] = v
+		}
+		XCTAssertEqual(dict["Add_db_login"] as? String, "zzzQ")
 	}
 
 	func testMetaConf() {

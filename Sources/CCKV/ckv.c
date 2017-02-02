@@ -475,3 +475,72 @@ ckv_key_get(struct ckv *ckv, char const* key, int key_len, struct ckv_str* val, 
 	}
 }
 
+/* private alias for iterator */
+struct ckv_iter_priv {
+	struct ckv_str key, val, fmt;
+
+	long pos;
+};
+
+void
+ckv_iter_init(struct ckv* ckv __attribute__((__unused__)), struct ckv_iter *iter) {
+	memset(iter, 0, sizeof(*iter));
+}
+
+int
+ckv_iter_next(struct ckv* ckv, struct ckv_iter* pubiter) {
+	struct ckv_iter_priv *iter = (struct ckv_iter_priv*)pubiter;
+	if (iter->pos == -1)
+		return 0;
+	if (ckv->kind == CKV_TEXT_NOFORMAT || ckv->kind == CKV_TEXT_WITH_FORMAT) {
+		if (iter->pos >= ckv->size) {
+			iter->pos = -1;
+			return 0;
+		}
+		struct ckv_text_item *item = ckv->items + iter->pos;
+		iter->pos++;
+		iter->key.str = ckv->mem + item->offset;
+		iter->key.len = item->key_size;
+		iter->val.str = iter->key.str + item->val_offset;
+		iter->val.len = item->val_size;
+		iter->fmt.str = iter->key.str + item->fmt_offset;
+		iter->fmt.len = item->fmt_size;
+		return 1;
+	} else if (ckv->kind == CKV_CDB_NOFORMAT || ckv->kind == CKV_CDB_BYTEFORMAT) {
+		uint32_t bucket, pos;
+		struct cdb_pair p, h, kv;
+repeat:
+		bucket = (uint32_t)(iter->pos&0xff);
+		pos = iter->pos >> 8;
+		read_cdb_pair(ckv->mem + bucket*8, &p);
+		for (; pos < p.b; pos++) {
+			read_cdb_pair(ckv->mem + p.a + pos*8, &h);
+			if (h.b == 0)
+				continue;
+			iter->pos = ((long)(pos+1) << 8) + bucket;
+			read_cdb_pair(ckv->mem + h.b, &kv);
+			iter->key.str = ckv->mem + h.b + 8;
+			iter->key.len = kv.a;
+			if (ckv->kind == CKV_CDB_BYTEFORMAT) {
+				iter->val.str = iter->key.str + kv.a + 1;
+				iter->val.len = kv.b-1;
+				iter->fmt.str = iter->key.str + kv.a;
+				iter->fmt.len = 1;
+			} else {
+				iter->val.str = iter->key.str + kv.a;
+				iter->val.len = kv.b;
+				iter->fmt.str = NULL;
+				iter->fmt.len = 0;
+			}
+			return 1;
+		}
+		if (bucket == 255) {
+			iter->pos = -1;
+			return 0;
+		}
+		iter->pos = bucket+1;
+		goto repeat;
+	} else {
+		assert(0);
+	}
+}

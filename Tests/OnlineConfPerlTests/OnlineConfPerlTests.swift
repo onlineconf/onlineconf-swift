@@ -23,6 +23,7 @@ class OnlineConfPerlTests: XCTestCase {
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/agent/friendship/check/macagent')->{check}"), 1)
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/agent/friendship/check/macagent')->{and}"), 1)
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->instance->get('/blogs/closed')"), 1)
+		XCTAssertEqual(try perl.eval("MR::OnlineConf->instance->getModule('MYMAIL')->{Add_db_login}"), "zzzQ")
 	}
 
 	func testPerlReload() {
