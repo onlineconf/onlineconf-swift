@@ -29,7 +29,7 @@ class OnlineConfPerlTests: XCTestCase {
 	func testPerlReload() {
 		var st = stat()
 		try! perl.eval("MR::OnlineConf->reload('MYMAIL')")
-		guard let config = try? Config(module: "MYMAIL")
+		guard let config = try? Config("MYMAIL")
 		else { return }
 		stat("/usr/local/etc/onlineconf/MYMAIL.cdb", &st)
 		XCTAssertEqual(st.st_mtim.tv_sec, config.mtime)

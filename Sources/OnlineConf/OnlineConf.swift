@@ -145,30 +145,29 @@ public final class Config {
 		print("OnlineConf error: \(path) - \(call) [\(num)]", to: &errStream)
 	}
 
+	public let name: String
 	var kv: OpaquePointer
-	let path: String
+	var path: String
 	let kind: Kind
 	let memory: Memory
 	var onError: ErrorCallback
 
 	var iteratorCount = 0
 
-	static var dir = "/usr/local/etc/onlineconf/"
-	
-	public convenience init(module: String, format: FileFormat = .cdb, typed: Bool = true, memory: Memory = .mmapMalloc, onError: @escaping ErrorCallback = Config.defaultErrorCallback) throws {
-		let path = Config.dir + module + format.ext
-		try self.init(path: path, kind: Kind(format: format, typed: typed), memory: memory, onError: onError)
+	static var dir = "/usr/local/etc/onlineconf/" {
+		didSet { try? forceReload() }
 	}
-
-	init(path: String, kind: Kind = Kind(format: .cdb, typed: true), memory: Memory = .mmapMalloc, onError: @escaping ErrorCallback = Config.defaultErrorCallback) throws {
+	
+	public init(_ module: String = "TREE", format: FileFormat = .cdb, typed: Bool = true, memory: Memory = .mmapMalloc, onError: @escaping ErrorCallback = Config.defaultErrorCallback) throws {
+		name = module
+		path = Config.dir + module + format.ext
+		kind = Kind(format: format, typed: typed)
+		self.memory = memory
 		self.onError = onError
 		guard let kv = ckv_open(path, kind.rawValue, memory.rawValue, errcb, UnsafeMutablePointer(&self.onError)) else {
 			throw Error.openFailure
 		}
 		self.kv = kv
-		self.path = path
-		self.kind = kind
-		self.memory = memory
 	}
 
 	deinit {
@@ -183,12 +182,14 @@ public final class Config {
 		guard iteratorCount == 0 else {
 			throw Error.lockedByIterator
 		}
+		path = Config.dir + name + kind.format.ext
 		guard let kv = ckv_open(path, kind.rawValue, memory.rawValue, errcb, UnsafeMutablePointer(&self.onError)) else {
 			throw Error.openFailure
 		}
 		ckv_close(self.kv)
 		self.kv = kv
 		recheckTime = Config.checkInterval.map { time(nil) + $0 }
+		callOnReload()
 	}
 
 	@discardableResult
@@ -205,9 +206,19 @@ public final class Config {
 		}
 	}
 
-	private func periodicReload() {
-		guard let rt = recheckTime, time(nil) > rt else { return }
-		reload()
+	@discardableResult
+	private func periodicReload() -> Bool {
+		guard let rt = recheckTime, time(nil) > rt else { return false }
+		defer { recheckTime = Config.checkInterval.map { time(nil) + $0 } }
+		return reload()
+	}
+
+	public func withPeriodicReload<R>(_ body: (Bool) throws -> R) rethrows -> R {
+		let reloaded = periodicReload()
+		let rt = recheckTime
+		recheckTime = nil
+		defer { recheckTime = rt }
+		return try body(reloaded)
 	}
 
 	public func get(_ key: String) -> String? {
@@ -296,34 +307,34 @@ public final class Config {
 		return ckv_fstat(kv)!.pointee.st_mtim.tv_sec
 	}
 
-	static private var configTree = try! getModule("TREE")
+	public static let tree = try! getModule("TREE")
 
-	static public func get(_ key: String) -> String? {
-		return configTree.get(key)
+	public static func get(_ key: String) -> String? {
+		return tree.get(key)
 	}
 
-	static public func get(_ key: String) -> [String]? {
-		return configTree.get(key)
+	public static func get(_ key: String) -> [String]? {
+		return tree.get(key)
 	}
 
-	static public func get(_ key: String) -> Int? {
-		return configTree.get(key)
+	public static func get(_ key: String) -> Int? {
+		return tree.get(key)
 	}
 
-	static public func get(_ key: String) -> Double? {
-		return configTree.get(key)
+	public static func get(_ key: String) -> Double? {
+		return tree.get(key)
 	}
 
-	static public func get(_ key: String) -> Bool {
-		return configTree.get(key)
+	public static func get(_ key: String) -> Bool {
+		return tree.get(key)
 	}
 
-	static public func getJSON(_ key: String) -> Any? {
-		return configTree.getJSON(key)
+	public static func getJSON(_ key: String) -> Any? {
+		return tree.getJSON(key)
 	}
 
-	static public var mtime: time_t {
-		return configTree.mtime
+	public static var mtime: time_t {
+		return tree.mtime
 	}
 
 	static var configs: [String: Config] = [:]
@@ -332,7 +343,7 @@ public final class Config {
 		if let config = Config.configs[module] {
 			return config
 		}
-		let config = try Config(module: module)
+		let config = try Config(module)
 		Config.configs[module] = config
 		return config
 	}
@@ -341,6 +352,7 @@ public final class Config {
 		return Config.configs[module]
 	}
 
+	@discardableResult
 	public static func reload() -> Bool {
 		var reloaded = false
 		for (_, c) in configs {
@@ -364,6 +376,26 @@ public final class Config {
 		}
 		if let error = firstError {
 			throw error
+		}
+	}
+
+	private static var onReloadCallbacks = [(Config) -> Void]()
+	private var onReloadCallbacks = [(Config) -> Void]()
+
+	public static func onReload(_ body: @escaping (Config) -> Void) {
+		onReloadCallbacks.append(body)
+	}
+
+	public func onReload(_ body: @escaping (Config) -> Void) {
+		onReloadCallbacks.append(body)
+	}
+
+	private func callOnReload() {
+		for callback in onReloadCallbacks {
+			callback(self)
+		}
+		for callback in Config.onReloadCallbacks {
+			callback(self)
 		}
 	}
 }

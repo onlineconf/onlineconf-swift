@@ -8,9 +8,12 @@ func errcv(path: String, call: String, num : Int) {
 
 class OnlineConfTests: XCTestCase {
 	func testLocalConf() {
+		let olddir = Config.dir
+		Config.dir = "Tests/OnlineConfTests/"
+		defer { Config.dir = olddir }
 		var cdbstat = stat()
 		stat("Tests/OnlineConfTests/test.cdb", &cdbstat)
-		let config = try! Config(path: "Tests/OnlineConfTests/test.cdb", onError: errcv)
+		let config = try! Config("test", onError: errcv)
 		XCTAssertEqual(1, config.get("/blogs/closed")! as Int)
 		XCTAssertEqual("alei6.mail.ru:13013", config.get("/infrastructure/database/box/UserStatsBox/0ME")! as String)
 		XCTAssertEqual(["1","2","3","4","5","7","8","9"], config.get("/infrastructure/database/box/ju/data/available-for-registration")! as [String])
@@ -66,8 +69,11 @@ class OnlineConfTests: XCTestCase {
 		var st = stat()
 		stat("/usr/local/etc/onlineconf/TREE.cdb", &st)
 		XCTAssertEqual(st.st_mtim.tv_sec, Config.mtime)
+		let olddir = Config.dir
+		Config.dir = "Tests/OnlineConfTests/"
+		defer { Config.dir = olddir }
 		stat("Tests/OnlineConfTests/test.cdb", &st)
-		let config = try! Config(path: "Tests/OnlineConfTests/test.cdb")
+		let config = try! Config("test")
 		XCTAssertEqual(st.st_mtim.tv_sec, config.mtime)
 		sleep(1)
 		let recheck = config.recheckTime
