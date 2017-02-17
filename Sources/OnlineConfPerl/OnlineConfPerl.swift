@@ -12,10 +12,8 @@ public func boot(_ p: UnsafeInterpreterPointer) {
 final class OnlineConfPerl : PerlObject, PerlNamedClass {
 	static let perlClassName = "MR::OnlineConf"
 
-	static var instances = PerlHash()
-	static let tree = PerlHash()
-	static var cache: PerlHash = ["TREE": PerlScalar(tree)]
-	static var moduleCache = [String: PerlScalar]()
+	static let tree = try! ConfigCache("TREE")
+	static var caches = [PerlScalar("TREE"): tree]
 
 	static let slash = UInt8(ascii: "/")
 
@@ -23,16 +21,7 @@ final class OnlineConfPerl : PerlObject, PerlNamedClass {
 		Config.onReload(onReload)
 
 		// mympop & qm compatibility
-		createPerlMethod("instance") {
-			(classname: PerlScalar) -> PerlScalar in
-			if let inst = instances[classname] {
-				return inst
-			} else {
-				let inst: PerlScalar = try perl.pointee.call(method: "_new_instance", args: CollectionOfOne(.some(classname)))
-				instances[classname] = inst
-				return inst
-			}
-		}
+		try! perl.pointee.eval("{ package MR::OnlineConf; my %instances; sub instance { ref $_[0] ? $_[0] : ($instances{$_[0]} ||= $_[0]->_new_instance()) } }")
 
 		// mympop & qm compatibility
 		createPerlMethod("_new_instance") {
@@ -53,34 +42,22 @@ final class OnlineConfPerl : PerlObject, PerlNamedClass {
 			var args = ArraySlice(args)
 			guard let moduleOrKey = args.popFirst() else { throw Error.invalidArguments }
 			let isKey = moduleOrKey.withUnsafeBytes { $0.load(as: UInt8.self) == slash }
-			let module: String
-			let cacheModule: PerlHash?
-			let config: Config
+			let cache: ConfigCache
 			let key: PerlScalar
 			if isKey {
-				module = "TREE"
-				cacheModule = tree
-				config = Config.tree
+				cache = tree
 				key = moduleOrKey
 			} else {
-				module = try String(moduleOrKey)
+				cache = try getCache(moduleOrKey)
 				guard let k = args.popFirst() else { throw Error.invalidArguments }
-				cacheModule = try cache.fetch(moduleOrKey)
-				config = try Config.getModule(module)
 				key = k
 			}
-			let value: PerlScalar = try config.withPeriodicReload { reloaded in
-				if !reloaded, let v = cacheModule?[key] {
+			let value: PerlScalar = try cache.config.withPeriodicReload { reloaded in
+				if !reloaded, let v = cache.cache[key] {
 					return v
 				} else {
-					let value = try config.withUnsafeValue(key: try String(key), body: decodeValue) ?? PerlScalar()
-					if cache[module] != nil {
-						try PerlHash(cache[module]!)[key] = value
-					} else {
-						let hv = PerlHash()
-						hv[key] = value
-						cache[module] = PerlScalar(hv)
-					}
+					let value = try cache.config.withUnsafeValue(key: try String(key), body: decodeValue) ?? PerlScalar()
+					cache.cache[key] = value
 					return value
 				}
 			}
@@ -88,18 +65,18 @@ final class OnlineConfPerl : PerlObject, PerlNamedClass {
 		}
 
 		createPerlMethod("getModule") {
-			(_: PerlScalar, module: String) throws -> PerlScalar in
-			if let c = moduleCache[module] {
-				return c
+			(_: PerlScalar, module: PerlScalar) throws -> PerlScalar in
+			let cache = try getCache(module)
+			if let m = cache.module {
+				return m
 			}
 			let hash = PerlHash()
-			let config = try Config.getModule(module)
-			let iterator = Config.Iterator(config)
+			let iterator = Config.Iterator(cache.config)
 			while let (key, value) = iterator.withNextUnsafeValue(decodeValue) {
 				hash[key] = value
 			}
 			let result = PerlScalar(hash)
-			moduleCache[module] = result
+			cache.module = result
 			return result
 		}
 
@@ -107,6 +84,16 @@ final class OnlineConfPerl : PerlObject, PerlNamedClass {
 		createPerlMethod("preload") {
 			() -> Void in
 			Config.reload()
+		}
+	}
+
+	private static func getCache(_ module: PerlScalar) throws -> ConfigCache {
+		if let cache = caches[module] {
+			return cache
+		} else {
+			let cache = try ConfigCache(try String(module))
+			caches[module] = cache
+			return cache
 		}
 	}
 
@@ -119,11 +106,27 @@ final class OnlineConfPerl : PerlObject, PerlNamedClass {
 	}
 
 	private static func onReload(_ config: Config) {
-		try! (cache.fetch(config.name) as PerlHash?)?.clear()
-		moduleCache[config.name] = nil
+		let module = PerlScalar(config.name)
+		caches[module]?.clear()
 	}
 
 	enum Error : Swift.Error {
 		case invalidArguments
+	}
+}
+
+final class ConfigCache {
+	let config: Config
+	var cache: [PerlScalar: PerlScalar]
+	var module: PerlScalar?
+
+	init(_ name: String) throws {
+		config = try Config.getModule(name)
+		cache = [:]
+	}
+
+	func clear() {
+		cache = [:]
+		module = nil
 	}
 }
