@@ -10,7 +10,7 @@ Source0:       %{name}-%{version}.tar.gz
 BuildRoot:     %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 BuildRequires: swift >= 3.0
-BuildRequires: swift-packaging >= 0.6
+BuildRequires: swift-packaging >= 0.8
 BuildRequires: swiftpm(https://github.com/my-mail-ru/swiftperl.git) >= 0.5.0
 
 %swift_package_ssh_url
@@ -37,10 +37,6 @@ rm -rf %{buildroot}
 %swift_install
 %swift_install_devel
 rm %{buildroot}%{swift_moduledir}/OnlineConfPerl.{swiftmodule,swiftdoc}
-mkdir -p %{buildroot}%{perl_vendorarch}/MR/
-cp Sources/OnlineConfPerl/OnlineConf.pm %{buildroot}%{perl_vendorarch}/MR/
-mkdir -p %{buildroot}%{perl_vendorarch}/auto/MR/OnlineConf/
-cp .build/release/libXS/OnlineConf.so %{buildroot}%{perl_vendorarch}/auto/MR/OnlineConf/
 
 
 %clean
