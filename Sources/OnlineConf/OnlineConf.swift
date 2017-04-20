@@ -189,6 +189,9 @@ public final class Config {
 		ckv_close(self.kv)
 		self.kv = kv
 		recheckTime = Config.checkInterval.map { time(nil) + $0 }
+		stringCache = [:]
+		stringsCache = [:]
+		jsonCache = [:]
 		callOnReload()
 	}
 
@@ -221,26 +224,69 @@ public final class Config {
 		return try body(reloaded)
 	}
 
+	var stringCache = [UnsafeRawPointer: String?]()
+
 	public func get(_ key: String) -> String? {
 		return withUnsafeValue(key: key) { value in
-			switch value.format {
-				case .cbor:
-					onError(key, "Invalid format \(value.format) for String", -1)
-					return nil
-				default:
-					do {
-						return try value.decodeString()
-					} catch {
-						onError(key, String(describing: error), -1)
-						return nil
-					}
+			if let v = stringCache[value.data.baseAddress!] {
+				return v
+			} else {
+				let val: String?
+				switch value.format {
+					case .cbor:
+						onError(key, "Invalid format \(value.format) for String", -1)
+						val = nil
+					default:
+						do {
+							val = try value.decodeString()
+						} catch {
+							onError(key, String(describing: error), -1)
+							val = nil
+						}
+				}
+				stringCache[value.data.baseAddress!] = val
+				return val
 			}
 		}
 	}
 
+	var stringsCache = [UnsafeRawPointer: [String]?]()
+
 	public func get(_ key: String) -> [String]? {
-		guard let str: String = get(key) else { return nil }
-		return str.characters.split(separator: ",").map(String.init)
+		return withUnsafeValue(key: key) { value in
+			if let v = stringsCache[value.data.baseAddress!] {
+				return v
+			} else {
+				let val: [String]?
+				switch value.format {
+					case .text:
+						do {
+							let str = try value.decodeString()
+							val = str.characters.split(separator: ",").map(String.init)
+						} catch {
+							onError(key, String(describing: error), -1)
+							val = nil
+						}
+					case .json:
+						do {
+							if let v = try value.decodeJSON() as? [String] {
+								val = v
+							} else {
+								onError(key, "Invalid json structure for [String]", -1)
+								val = nil
+							}
+						} catch {
+							onError(key, String(describing: error), -1)
+							val = nil
+						}
+					case .cbor:
+						onError(key, "CBOR is unsupported yet", -1)
+						val = nil
+				}
+				stringsCache[value.data.baseAddress!] = val
+				return val
+			}
+		}
 	}
 
 	public func get(_ key: String) -> Int? {
@@ -262,8 +308,16 @@ public final class Config {
 	}
 
 	public func get(_ key: String) -> Bool {
-		guard let str: String = get(key) else { return false }
-		return !(str.isEmpty || str == "0")
+		return withUnsafeValue(key: key) {
+			switch $0.data.count {
+				case 0:
+					return false
+				case 1:
+					return $0.data[0] != UInt8(ascii: "0")
+				default:
+					return true
+			}
+		} ?? false
 	}
 
 	public func withUnsafeValue<R>(key: String, body: (UnsafeValue) throws -> R?) rethrows -> R? {
@@ -283,22 +337,31 @@ public final class Config {
 		return try body(value)
 	}
 
+	var jsonCache = [UnsafeRawPointer: Any?]()
+
 	public func getJSON(_ key: String) -> Any? {
 		return withUnsafeValue(key: key) { value in
-			switch value.format {
-				case .json:
-					do {
-						return try value.decodeJSON()
-					} catch {
-						onError(key, String(describing: error), -1)
-						return nil
-					}
-				case .cbor:
-					onError(key, "CBOR is unsupported yet", -1)
-					return nil
-				default:
-					onError(key, "Format is not JSON: \(value.format)", -1)
-					return nil
+			if let v = jsonCache[value.data.baseAddress!] {
+				return v
+			} else {
+				let val: Any?
+				switch value.format {
+					case .json:
+						do {
+							val = try value.decodeJSON()
+						} catch {
+							onError(key, String(describing: error), -1)
+							val = nil
+						}
+					case .cbor:
+						onError(key, "CBOR is unsupported yet", -1)
+						val = nil
+					default:
+						onError(key, "Format is not JSON: \(value.format)", -1)
+						val = nil
+				}
+				jsonCache[value.data.baseAddress!] = val
+				return val
 			}
 		}
 	}
@@ -327,6 +390,10 @@ public final class Config {
 
 	public static func get(_ key: String) -> Bool {
 		return tree.get(key)
+	}
+
+	public static func withUnsafeValue<R>(key: String, body: (UnsafeValue) throws -> R?) rethrows -> R? {
+		return try tree.withUnsafeValue(key: key, body: body)
 	}
 
 	public static func getJSON(_ key: String) -> Any? {

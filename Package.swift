@@ -1,5 +1,7 @@
 import PackageDescription
 
+let benchmark = false
+
 let package = Package(
 	name: "OnlineConf",
 	targets: [
@@ -13,3 +15,10 @@ let package = Package(
 )
 
 products.append(Product(name: "/perl5/auto/MR/OnlineConf/OnlineConf", type: .Library(.Dynamic), modules: "OnlineConfPerl"))
+
+if benchmark {
+	package.targets.append(Target(name: "onlineconf-benchmark", dependencies: [.Target(name: "OnlineConf")]))
+	package.dependencies.append(.Package(url: "https://github.com/my-mail-ru/swift-Benchmark.git", majorVersion: 0))
+} else {
+	package.exclude.append("Sources/onlineconf-benchmark")
+}
