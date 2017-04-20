@@ -8,6 +8,7 @@ let package = Package(
 		Target(name: "CCKV"),
 		Target(name: "OnlineConf", dependencies: [.Target(name: "CCKV")]),
 		Target(name: "OnlineConfPerl", dependencies: [.Target(name: "OnlineConf")]),
+		Target(name: "onlineconf-get", dependencies: [.Target(name: "OnlineConf")]),
 	],
 	dependencies: [
 		.Package(url: "https://github.com/my-mail-ru/swiftperl.git", versions: Version(0, 5, 0)..<Version(0, .max, .max)),

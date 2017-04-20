@@ -45,6 +45,7 @@ rm -rf %{buildroot}
 
 %files
 %defattr(-,root,root,-)
+%{swift_bindir}/*
 %{swift_libdir}/*.so
 
 
