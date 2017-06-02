@@ -3,10 +3,11 @@ import OnlineConf
 import Perl
 
 @_cdecl("boot_MR__OnlineConf")
-public func boot(_ p: UnsafeInterpreterPointer) {
-	try! p.pointee.require("JSON::XS")
-	try! p.pointee.require("CBOR::XS")
-	OnlineConfPerl.initialize(perl: p)
+public func boot(_ p: PerlInterpreter.Pointer) {
+	let perl = PerlInterpreter(p)
+	try! perl.require("JSON::XS")
+	try! perl.require("CBOR::XS")
+	OnlineConfPerl.initialize(perl: perl)
 }
 
 final class OnlineConfPerl : PerlObject, PerlNamedClass {
@@ -17,11 +18,11 @@ final class OnlineConfPerl : PerlObject, PerlNamedClass {
 
 	static let slash = UInt8(ascii: "/")
 
-	static func initialize(perl: UnsafeInterpreterPointer = UnsafeInterpreter.current) {
+	static func initialize(perl: PerlInterpreter = .current) {
 		Config.onReload(onReload)
 
 		// mympop & qm compatibility
-		try! perl.pointee.eval("{ package MR::OnlineConf; my %instances; sub instance { ref $_[0] ? $_[0] : ($instances{$_[0]} ||= $_[0]->_new_instance()) } }")
+		try! perl.eval("{ package MR::OnlineConf; my %instances; sub instance { ref $_[0] ? $_[0] : ($instances{$_[0]} ||= $_[0]->_new_instance()) } }")
 
 		// mympop & qm compatibility
 		createPerlMethod("_new_instance") {
@@ -29,7 +30,7 @@ final class OnlineConfPerl : PerlObject, PerlNamedClass {
 			if !(options["reload"].map(Bool.init) ?? true) {
 				Config.checkInterval = nil
 			}
-			return try perl.pointee.eval("bless { cfg => { check_interval => 5 } }, '\(classname)'")
+			return try perl.eval("bless { cfg => { check_interval => 5 } }, '\(classname)'")
 		}
 
 		createPerlMethod("reload") {

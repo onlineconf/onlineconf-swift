@@ -5,8 +5,8 @@ import Perl
 @testable import OnlineConfPerl
 
 let perl: PerlInterpreter = {
-	let perl = PerlInterpreter()
-	perl.withUnsafeInterpreterPointer(boot)
+	let perl = PerlInterpreter.new()
+	boot(perl.pointer)
 	return perl
 }()
 

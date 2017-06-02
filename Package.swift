@@ -11,7 +11,7 @@ let package = Package(
 		Target(name: "onlineconf-get", dependencies: [.Target(name: "OnlineConf")]),
 	],
 	dependencies: [
-		.Package(url: "https://github.com/my-mail-ru/swiftperl.git", versions: Version(0, 5, 0)..<Version(0, .max, .max)),
+		.Package(url: "https://github.com/my-mail-ru/swiftperl.git", versions: Version(1, 0, 0)..<Version(1, .max, .max)),
 	]
 )
 

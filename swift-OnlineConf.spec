@@ -11,7 +11,7 @@ BuildRoot:     %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 BuildRequires: swift >= 3.0
 BuildRequires: swift-packaging >= 0.8
-BuildRequires: swiftpm(https://github.com/my-mail-ru/swiftperl.git) >= 0.5.0
+BuildRequires: swiftpm(https://github.com/my-mail-ru/swiftperl.git) >= 1.0.0
 
 %swift_package_ssh_url
 %swift_find_provides_and_requires
