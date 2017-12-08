@@ -1,25 +1,29 @@
+// swift-tools-version:4.0
 import PackageDescription
 
 let benchmark = false
 
 let package = Package(
 	name: "OnlineConf",
-	targets: [
-		Target(name: "CCKV"),
-		Target(name: "OnlineConf", dependencies: [.Target(name: "CCKV")]),
-		Target(name: "OnlineConfPerl", dependencies: [.Target(name: "OnlineConf")]),
-		Target(name: "onlineconf-get", dependencies: [.Target(name: "OnlineConf")]),
+	products: [
+		.library(name: "OnlineConf", targets: ["OnlineConf"]),
+		.library(name: "perlOnlineConf", type: .dynamic, targets: ["OnlineConfPerl"]),
+		.executable(name: "onlineconf-get", targets: ["onlineconf-get"]),
 	],
 	dependencies: [
-		.Package(url: "https://github.com/my-mail-ru/swiftperl.git", versions: Version(1, 0, 0)..<Version(1, .max, .max)),
+		.package(url: "https://github.com/my-mail-ru/swiftperl.git", from: "1.0.1"),
+	],
+	targets: [
+		.target(name: "CCKV"),
+		.target(name: "OnlineConf", dependencies: ["CCKV"]),
+		.target(name: "OnlineConfPerl", dependencies: ["OnlineConf", "Perl"]),
+		.target(name: "onlineconf-get", dependencies: ["OnlineConf"]),
+		.testTarget(name: "OnlineConfTests", dependencies: ["OnlineConf"]),
+		.testTarget(name: "OnlineConfPerlTests", dependencies: ["OnlineConfPerl"]),
 	]
 )
 
-products.append(Product(name: "/perl5/auto/MR/OnlineConf/OnlineConf", type: .Library(.Dynamic), modules: "OnlineConfPerl"))
-
 if benchmark {
-	package.targets.append(Target(name: "onlineconf-benchmark", dependencies: [.Target(name: "OnlineConf")]))
-	package.dependencies.append(.Package(url: "https://github.com/my-mail-ru/swift-Benchmark.git", majorVersion: 0))
-} else {
-	package.exclude.append("Sources/onlineconf-benchmark")
+	package.targets.append(.target(name: "onlineconf-benchmark", dependencies: ["OnlineConf", "Benchmark"]))
+	package.dependencies.append(.package(url: "https://github.com/my-mail-ru/swift-Benchmark.git", from: "0.3.1"))
 }

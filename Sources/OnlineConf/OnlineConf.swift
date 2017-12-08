@@ -141,7 +141,7 @@ public final class Config {
 
 	public typealias ErrorCallback = (String, String, Int) -> Void
 
-	private static func defaultErrorCallback(path: String, call: String, num: Int) {
+	public static func defaultErrorCallback(path: String, call: String, num: Int) {
 		print("OnlineConf error: \(path) - \(call) [\(num)]", to: &errStream)
 	}
 
@@ -262,7 +262,7 @@ public final class Config {
 					case .text:
 						do {
 							let str = try value.decodeString()
-							val = str.characters.split(separator: ",").map(String.init)
+							val = str.split(separator: ",").map(String.init)
 						} catch {
 							onError(key, String(describing: error), -1)
 							val = nil
