@@ -9,10 +9,11 @@ URL:           https://gitlab.corp.mail.ru/mydev/%{name}
 Source0:       %{name}-%{version}.tar.gz
 BuildRoot:     %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
-BuildRequires: swift >= 4.0
-BuildRequires: swift-packaging >= 0.9
-BuildRequires: swiftpm(https://github.com/my-mail-ru/swiftperl.git) >= 1.0.1
+BuildRequires: swift >= 5.0
+BuildRequires: swift-packaging >= 0.10
+BuildRequires: swiftpm(https://github.com/my-mail-ru/swiftperl.git) >= 1.1.0
 
+%undefine _missing_build_ids_terminate_build
 %swift_package_ssh_url
 %swift_find_provides_and_requires
 
@@ -24,7 +25,6 @@ OnlineConf client for Swift.
 
 %prep
 %setup -q
-%swift_patch_package
 sed -i 's/^our \$VERSION = .*$/use version; our $VERSION = version->declare("v%{version}");/' Sources/OnlineConfPerl/OnlineConf.pm
 
 

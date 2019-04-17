@@ -103,7 +103,7 @@ public final class Config {
 		public let data: UnsafeRawBufferPointer
 
 		func decodeString() throws -> String {
-			guard let str = String._fromCodeUnitSequence(UTF8.self, input: data) else {
+			guard let str = String._tryFromUTF8(data.bindMemory(to: UInt8.self)) else {
 				throw DecodeError.invalidUTF8
 			}
 			return str
@@ -489,7 +489,7 @@ extension Config : Sequence {
 		public func withNextUnsafeValue<V>(_ body: (Config.UnsafeValue) throws -> V) -> (String, V)? {
 			while true {
 				guard ckv_iter_next(config.kv, &iter) != 0 else { return nil }
-				let key = String._fromCodeUnitSequenceWithRepair(UTF8.self, input: UnsafeRawBufferPointer(start: iter.key.str, count: Int(iter.key.len))).0
+				let key = UnsafeBufferPointer(start: iter.key.str, count: Int(iter.key.len)).withMemoryRebound(to: UInt8.self) { String(decoding: $0, as: UTF8.self) }
 				let format = Config.ValueFormat(rawValue: UnsafeRawBufferPointer(start: iter.fmt.str, count: Int(iter.fmt.len)), fileFormat: config.kind.format)
 				let value = Config.UnsafeValue(format: format, data: UnsafeRawBufferPointer(start: iter.val.str, count: Int(iter.val.len)))
 				do {

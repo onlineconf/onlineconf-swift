@@ -1,4 +1,4 @@
-// swift-tools-version:4.0
+// swift-tools-version:5.0
 import PackageDescription
 
 let benchmark = false
@@ -11,7 +11,7 @@ let package = Package(
 		.executable(name: "onlineconf-get", targets: ["onlineconf-get"]),
 	],
 	dependencies: [
-		.package(url: "https://github.com/my-mail-ru/swiftperl.git", from: "1.0.1"),
+		.package(url: "https://github.com/my-mail-ru/swiftperl.git", from: "1.1.0"),
 	],
 	targets: [
 		.target(name: "CCKV"),
