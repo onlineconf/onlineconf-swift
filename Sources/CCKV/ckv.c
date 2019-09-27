@@ -28,14 +28,12 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#include <malloc.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <inttypes.h>
 #include <errno.h>
-#include <endian.h>
 #if _POSIX_MAPPED_FILES > 0
 #include <sys/mman.h>
 #endif
@@ -87,9 +85,12 @@ static void
 read_cdb_pair(void const* p, struct cdb_pair *pair) {
 	pair->a = *(uint32_t __attribute__((packed))*)p;
 	pair->b = *(uint32_t __attribute__((packed))*)(p + 4);
-#if __BYTE_ORDER == __BIG_ENDIAN
-	pair->a = hton(pair->a);
-	pair->b = hton(pair->b);
+#if defined (__APPLE__)
+	pair->a = OSSwapLittleToHostInt32(pair->a);
+	pair->b = OSSwapLittleToHostInt32(pair->b);
+#else
+	pair->a = le32toh(pair->a);
+	pair->b = le32toh(pair->b);
 #endif
 }
 

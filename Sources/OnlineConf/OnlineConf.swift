@@ -157,7 +157,7 @@ public final class Config {
 	static var dir = "/usr/local/etc/onlineconf/" {
 		didSet { try? forceReload() }
 	}
-	
+
 	public init(_ module: String = "TREE", format: FileFormat = .cdb, typed: Bool = true, memory: Memory = .mmapMalloc, onError: @escaping ErrorCallback = Config.defaultErrorCallback) throws {
 		name = module
 		path = Config.dir + module + format.ext
@@ -199,7 +199,7 @@ public final class Config {
 	public func reload() -> Bool {
 		var st = stat()
 		guard stat(path, &st) == 0 else { return false }
-		guard st.st_mtim.tv_sec > mtime else { return false }
+		guard st.st_mtime > mtime else { return false }
 		do {
 			try forceReload()
 			return true
@@ -307,7 +307,7 @@ public final class Config {
 		return dbl
 	}
 
-	public func get(_ key: String) -> Bool {
+	public func get(_ key: String) -> Bool? {
 		return withUnsafeValue(key: key) {
 			switch $0.data.count {
 				case 0:
@@ -317,7 +317,12 @@ public final class Config {
 				default:
 					return true
 			}
-		} ?? false
+		}
+	}
+
+	@available(*, deprecated)
+	public func get(_ key: String) -> Bool {
+		return get(key) ?? false
 	}
 
 	public func withUnsafeValue<R>(key: String, body: (UnsafeValue) throws -> R?) rethrows -> R? {
@@ -367,7 +372,7 @@ public final class Config {
 	}
 
 	public var mtime: time_t {
-		return ckv_fstat(kv)!.pointee.st_mtim.tv_sec
+		return ckv_fstat(kv)!.pointee.st_mtime
 	}
 
 	public static let tree = try! getModule("TREE")
@@ -388,6 +393,11 @@ public final class Config {
 		return tree.get(key)
 	}
 
+	public static func get(_ key: String) -> Bool? {
+		return tree.get(key)
+	}
+
+	@available(*, deprecated)
 	public static func get(_ key: String) -> Bool {
 		return tree.get(key)
 	}
@@ -515,3 +525,13 @@ struct StderrOutputStream: TextOutputStream {
 }
 
 var errStream = StderrOutputStream()
+
+extension stat {
+	var st_mtime: time_t {
+		#if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
+			return st_mtimespec.tv_sec
+		#else
+			return st_mtim.tv_sec
+		#endif
+	}
+}

@@ -1,5 +1,9 @@
 import OnlineConf
+#if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
+import func Darwin.exit
+#else
 import func Glibc.exit
+#endif
 
 enum Format {
 	case text
@@ -55,5 +59,5 @@ switch format {
 	case .json:
 		config.getJSON(key).map { print($0) }
 	case .bool:
-		exit(config.get(key) as Bool ? 0 : 1)
+		exit(config.get(key) ?? false ? 0 : 1)
 }
