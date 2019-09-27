@@ -11,31 +11,26 @@ let perl: PerlInterpreter = {
 }()
 
 class OnlineConfPerlTests: XCTestCase {
+	override func setUp() {
+		Config.dir = "Tests/OnlineConfTests/"
+	}
+
 	func testPerlConf() {
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/blogs/closed')"), 1)
-		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('MYMAIL', 'Add_db_login')"), "zzzQ")
-		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('kotiki', 'kotiki_db_login')"), "alei")
-		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/undef_key_from_tree', 404)"), 404)
-		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('MYMAIL', 'undef_key', 404)"), 404)
-		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/undef_without_def')") ?? 404, 404)
-		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/undef_without_def')") ?? 1000, 1000)
-		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('kotiki', 'undef_without_def')") ?? 404, 404)
+		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('TREE', '/blogs/closed')"), 1)
+		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/undef_key', 404)"), 404)
+		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('TREE', '/undef_key', 404)"), 404)
+		XCTAssertNil(try perl.eval("MR::OnlineConf->get('/undef_without_def')") as String?)
+		XCTAssertNil(try perl.eval("MR::OnlineConf->get('TREE', '/undef_without_def')") as String?)
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/agent/friendship/check/macagent')->{check}"), 1)
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->get('/agent/friendship/check/macagent')->{and}"), 1)
 		XCTAssertEqual(try perl.eval("MR::OnlineConf->instance->get('/blogs/closed')"), 1)
-		XCTAssertEqual(try perl.eval("MR::OnlineConf->instance->getModule('MYMAIL')->{Add_db_login}"), "zzzQ")
+		XCTAssertEqual(try perl.eval("MR::OnlineConf->instance->getModule('TREE')->{'/blogs/closed'}"), "1")
 	}
 
 	func testPerlReload() {
-		var st = stat()
-		try! perl.eval("MR::OnlineConf->reload('MYMAIL')")
-		guard let config = try? Config("MYMAIL")
-		else { return }
-		stat("/usr/local/etc/onlineconf/MYMAIL.cdb", &st)
-		XCTAssertEqual(st.st_mtim.tv_sec, config.mtime)
-		stat("/usr/local/etc/onlineconf/TREE.cdb", &st)
-		XCTAssertEqual(st.st_mtim.tv_sec, Config.mtime)
-		try! perl.eval("MR::OnlineConf->instance->reload('MYMAIL')")
+		try! perl.eval("MR::OnlineConf->reload('TREE')")
+		try! perl.eval("MR::OnlineConf->instance->reload('TREE')")
 	}
 
 	static var allTests: [(String, (OnlineConfPerlTests) -> () throws -> Void)] {
