@@ -25,6 +25,7 @@ OnlineConf client for Swift.
 
 %prep
 %setup -q
+sed -i 's/^let perl = false/let perl = true/' Package.swift
 sed -i 's/^our \$VERSION = .*$/use version; our $VERSION = version->declare("v%{version}");/' Sources/OnlineConfPerl/OnlineConf.pm
 
 
